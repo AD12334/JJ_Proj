@@ -1,5 +1,5 @@
 gymnasium[atari]==0.29.1
-ale-py==0.8.1
+ale-py
 torch
 stable-baselines3
 gymnasium[accept-rom-license]
