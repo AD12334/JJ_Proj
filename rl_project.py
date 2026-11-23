@@ -40,7 +40,7 @@ import tensorflow as tf
 from tensorflow.keras import layers, models, optimizers
 import numpy as np
 from collections import deque
-
+from gymnasium.wrappers import RecordVideo
 gym.register_envs(ale_py)
 
 env = gym.make("ALE/SpaceInvaders-v5", render_mode="rgb_array") # load our space invaders as a rgb array
@@ -248,8 +248,15 @@ LEARNING_RATE = 0.0001
 ALPHA_DECAY = 0
 GAMMA = 0.99
 
+train_env = RecordVideo(
+    env,
+    video_folder="videos/training",
+    name_prefix="space_invaders",
+    episode_trigger=lambda ep: ep % 5 == 0,   # episodes 0, 5, 10, 15
+)
+
 dqn = DQN(
-    env=env,
+    env=train_env,
     height=84,
     width=84,
     channels=4,
@@ -265,10 +272,31 @@ dqn = DQN(
 )
 
 avg_scores = dqn.train()
+
+train_env.close()   # flushes the last video to disk
+
+eval_env = gym.make("ALE/SpaceInvaders-v5", render_mode="rgb_array")
+eval_env = RecordVideo(eval_env, video_folder="videos/eval",
+                       name_prefix="trained", episode_trigger=lambda ep: True)
+
+for ep in range(3):
+    obs, info = eval_env.reset()
+    state = combine_images(preprocess_state(obs), preprocess_state(obs))
+    done, total = False, 0
+    while not done:
+        action = dqn.choose_action(state, epsilon=0.0)   # greedy, no exploring
+        obs, reward, terminated, truncated, info = eval_env.step(action)
+        state = combine_images(state, preprocess_state(obs))
+        total += reward
+        done = terminated or truncated
+    print(f"Eval episode {ep}: score {total}")
+
+eval_env.close()
+
 plt.plot(avg_scores)
 plt.xlabel('Episode')
 plt.ylabel('Avg score')
-plt.show()
+plt.savefig("avg_scores.png", dpi=150)
 
 """# Results
 
