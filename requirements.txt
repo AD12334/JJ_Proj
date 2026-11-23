@@ -1,6 +1,9 @@
-gymnasium[atari]==0.29.1
+gymnasium[atari]
 ale-py
 torch
 stable-baselines3
 gymnasium[accept-rom-license]
 pygame
+matplotlib
+tensorflow
+numpy
