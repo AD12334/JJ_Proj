@@ -268,7 +268,7 @@ train_env = RecordVideo(
     video_folder="videos/training",
     name_prefix="space_invaders",
     episode_trigger=lambda ep: ep % 5 == 0,   # episodes 0, 5, 10, 15
-)
+) # Record episodes
 
 dqn = DQN(
     env=train_env,
