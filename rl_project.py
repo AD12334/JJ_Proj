@@ -43,9 +43,23 @@ from collections import deque
 from gymnasium.wrappers import RecordVideo
 gym.register_envs(ale_py)
 
+print("TensorFlow version:", tf.__version__)
+print("GPUs detected:", tf.config.list_physical_devices('GPU'))
+
+gpus = tf.config.list_physical_devices('GPU')
+
+if gpus:
+    print("Using NVIDIA GPU:", gpus[0])
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+else:
+    print("No GPU detected. Using CPU.")
+
+
 env = gym.make("ALE/SpaceInvaders-v5", render_mode="rgb_array") # load our space invaders as a rgb array
 observation, info = env.reset() #reset the environment
 pygame.init() # initialise pygame for rendering
+
 
 """### Preprocessing of data"""
 
@@ -137,7 +151,7 @@ class DQN:
         self.epsilon_decay = epsilon_decay
         self.epsilon_min = epsilon_min
         self.threshold = threshold
-        self.memory = deque(maxlen=20_000)
+        self.memory = deque(maxlen=500_000)
         self.gamma = gamma
         self.model = self.build_model(
             height, width, channels, action_size, alpha, alpha_decay, seed
@@ -221,27 +235,28 @@ class DQN:
                 self.epsilon = max(self.epsilon_min, self.epsilon_decay * self.epsilon)
                 i += reward
                 step += 1
-                if step > 5000 and step % 4 == 0:
+                if step > 50000 and step % 4 == 0:
                     self.replay(32, self.memory)
-                if step % 1000 == 0:
+                if step % 10000 == 0:
                     self.model_target.set_weights(self.model.get_weights())
 
             #while loop finished
+            print(f'Steps completed before termination {step} - epsilon: {self.epsilon} - reward {i}')
             scores.append(i)
             mean_score = np.mean(scores)
             avg_scores.append(mean_score)
             if mean_score >= self.threshold:
-                print('Solved after {} trials ✔'.format(e))
+                print('Solved after {} trials '.format(e))
                 return avg_scores
             if e % 5 == 0:
-                print('[Episode {}] - Average Score: {}.'.format(e,mean_score))
+                print('[Epoch {}] - Average Score: {} - epsilon: {}.'.format(e,mean_score,self.epsilon))
 
         return avg_scores
 
 N_OUTPUTS = 6
-EPOCHS = 100
+EPOCHS = 1000
 EPSILON = 0.99
-EPSILON_DECAY = 0.9999
+EPSILON_DECAY = 0.99999
 THRESHOLD = 9000
 EPSILON_MIN = 0.05
 LEARNING_RATE = 0.0001
