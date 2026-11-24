@@ -41,6 +41,9 @@ from tensorflow.keras import layers, models, optimizers
 import numpy as np
 from collections import deque
 from gymnasium.wrappers import RecordVideo
+import os, csv, json, pickle, logging
+from datetime import datetime
+
 gym.register_envs(ale_py)
 
 print("TensorFlow version:", tf.__version__)
@@ -55,6 +58,16 @@ if gpus:
 else:
     print("No GPU detected. Using CPU.")
 
+RUN_DIR = f"runs/{datetime.now():%Y%m%d_%H%M%S}"
+os.makedirs(f"{RUN_DIR}/checkpoints", exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(message)s",
+    handlers=[logging.FileHandler(f"{RUN_DIR}/train.log"),   # to file
+              logging.StreamHandler()],                       # and still to the terminal
+)
+log = logging.getLogger("dqn")
 
 env = gym.make("ALE/SpaceInvaders-v5", render_mode="rgb_array") # load our space invaders as a rgb array
 observation, info = env.reset() #reset the environment
@@ -206,7 +219,8 @@ class DQN:
         for j, (_, action, reward, _, done) in enumerate(minibatch):
             q[j][action] = reward if done else reward + self.gamma * np.max(q_next[j])
         # backpropagation
-        self.model.fit(states, q, verbose=0)
+        history = self.model.fit(states, q, verbose=0)
+        return history.history["loss"][0]
 
     def remember(self, state, action, reward, next_state, done):
         return self.memory.append((state, action, reward, next_state, done))
@@ -215,12 +229,18 @@ class DQN:
         scores = deque(maxlen=100)
         avg_scores = []
         step = 0
+        best_mean = -np.inf
+        csv_file = open(f"{RUN_DIR}/episodes.csv", "w", newline="")
+        writer = csv.writer(csv_file)
+        writer.writerow(["episode", "total_steps", "episode_steps", "reward",
+                        "mean_100", "epsilon", "mean_loss"])
         for e in range(self.epochs):
             obs, info = self.env.reset()
             state = preprocess_state(obs)
             state = combine_images(state, state)
             done = False
             i = 0
+            losses, ep_steps = [], 0
             while not done:
                 action = self.choose_action(state)
                 next_state, reward, terminated, truncated, info = self.env.step(action)
@@ -235,8 +255,11 @@ class DQN:
                 self.epsilon = max(self.epsilon_min, self.epsilon_decay * self.epsilon)
                 i += reward
                 step += 1
+                ep_steps += 1
                 if step > 50000 and step % 4 == 0:
-                    self.replay(32, self.memory)
+                    loss = self.replay(32, self.memory)
+                    if loss is not None:
+                        losses.append(loss)
                 if step % 10000 == 0:
                     self.model_target.set_weights(self.model.get_weights())
 
@@ -245,12 +268,27 @@ class DQN:
             scores.append(i)
             mean_score = np.mean(scores)
             avg_scores.append(mean_score)
+            mean_loss = np.mean(losses) if losses else ""
+            writer.writerow([e, step, ep_steps, i, mean_score, self.epsilon, mean_loss])
+            csv_file.flush()                       # so the file is up to date if the run crashes
+            log.info(f"ep {e}  steps {step}  reward {i:.0f}  mean100 {mean_score:.1f}  "
+                    f"eps {self.epsilon:.3f}  loss {mean_loss}")
+            if e % 50 == 0:
+                self.model.save(f"{RUN_DIR}/checkpoints/ep{e}.keras") # save our model
+            if mean_score > best_mean and step > 50000:
+                best_mean = mean_score
+                self.model.save(f"{RUN_DIR}/best.keras")
+                
             if mean_score >= self.threshold:
                 print('Solved after {} trials '.format(e))
-                return avg_scores
+                break
             if e % 5 == 0:
                 print('[Epoch {}] - Average Score: {} - epsilon: {}.'.format(e,mean_score,self.epsilon))
-
+                
+        csv_file.close()
+        self.model.save(f"{RUN_DIR}/final.keras")
+        with open(f"{RUN_DIR}/history.pkl", "wb") as f:
+            pickle.dump({"avg_scores": avg_scores}, f) #write results to file
         return avg_scores
 
 N_OUTPUTS = 6
@@ -265,7 +303,7 @@ GAMMA = 0.99
 
 train_env = RecordVideo(
     env,
-    video_folder="videos/training",
+    video_folder=f"{RUN_DIR}/videos/training",
     name_prefix="space_invaders",
     episode_trigger=lambda ep: ep % 5 == 0,   # episodes 0, 5, 10, 15
 ) # Record episodes
@@ -286,12 +324,17 @@ dqn = DQN(
     gamma=GAMMA
 )
 
+with open(f"{RUN_DIR}/config.json", "w") as f:
+    json.dump({"epochs": EPOCHS, "epsilon": EPSILON, "epsilon_decay": EPSILON_DECAY,
+               "epsilon_min": EPSILON_MIN, "lr": LEARNING_RATE, "gamma": GAMMA,
+               "buffer": dqn.memory.maxlen}, f, indent=2)
+    
 avg_scores = dqn.train()
 
 train_env.close()   # flushes the last video to disk
 
 eval_env = gym.make("ALE/SpaceInvaders-v5", render_mode="rgb_array")
-eval_env = RecordVideo(eval_env, video_folder="videos/eval",
+eval_env = RecordVideo(eval_env, video_folder=f"{RUN_DIR}/videos/eval",
                        name_prefix="trained", episode_trigger=lambda ep: True)
 
 for ep in range(3):
@@ -311,7 +354,7 @@ eval_env.close()
 plt.plot(avg_scores)
 plt.xlabel('Episode')
 plt.ylabel('Avg score')
-plt.savefig("avg_scores.png", dpi=150)
+plt.savefig(f"{RUN_DIR}/avg_scores.png", dpi=150)
 
 """# Results
 
