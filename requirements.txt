@@ -7,3 +7,5 @@ pygame
 matplotlib
 tensorflow
 numpy
+tensorflow[and-cuda]
+moviepy
