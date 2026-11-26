@@ -164,7 +164,7 @@ class DQN:
         self.epsilon_decay = epsilon_decay
         self.epsilon_min = epsilon_min
         self.threshold = threshold
-        self.memory = deque(maxlen=500_000)
+        self.memory = deque(maxlen=100_000)  # ~5.6 GB with uint8 frame stacks
         self.gamma = gamma
         self.model = self.build_model(
             height, width, channels, action_size, alpha, alpha_decay, seed
@@ -212,18 +212,29 @@ class DQN:
         if len(memory) < batch_size:
             return
         minibatch = random.sample(memory, batch_size)
-        states = np.concatenate([s for s, _, _, _, _ in minibatch])
-        next_states = np.concatenate([n for _, _, _, n, _ in minibatch])
-        q = self.model.predict(states, verbose=0)
-        q_next = self.model_target.predict(next_states, verbose=0)
-        for j, (_, action, reward, _, done) in enumerate(minibatch):
-            q[j][action] = reward if done else reward + self.gamma * np.max(q_next[j])
+        # frames are stored as uint8, convert back to float32 in [0, 1]
+        states = np.concatenate([m[0] for m in minibatch]).astype(np.float32) / 255
+        actions = np.array([m[1] for m in minibatch])
+        rewards = np.array([m[2] for m in minibatch], dtype=np.float32)
+        next_states = np.concatenate([m[3] for m in minibatch]).astype(np.float32) / 255
+        dones = np.array([m[4] for m in minibatch], dtype=np.float32)
+        # direct model calls avoid the heavy per-call overhead of predict()/fit()
+        q = self.model(states, training=False).numpy()
+        q_next = self.model_target(next_states, training=False).numpy()
+        q[np.arange(batch_size), actions] = rewards + (1 - dones) * self.gamma * q_next.max(axis=1)
         # backpropagation
-        history = self.model.fit(states, q, verbose=0)
-        return history.history["loss"][0]
+        loss = self.model.train_on_batch(states, q)
+        return float(loss)
+
+    @staticmethod
+    def to_uint8(state):
+        return np.round(np.asarray(state) * 255).astype(np.uint8)
 
     def remember(self, state, action, reward, next_state, done):
-        return self.memory.append((state, action, reward, next_state, done))
+        # store as uint8 numpy arrays (4x smaller than float32, and kept in CPU RAM not GPU memory)
+        return self.memory.append(
+            (self.to_uint8(state), action, reward, self.to_uint8(next_state), done)
+        )
 
     def train(self):
         scores = deque(maxlen=100)
@@ -279,7 +290,7 @@ class DQN:
                 best_mean = mean_score
                 self.model.save(f"{RUN_DIR}/best.keras")
                 
-            if mean_score >= self.threshold:
+            if len(scores) == scores.maxlen and mean_score >= self.threshold:
                 print('Solved after {} trials '.format(e))
                 break
             if e % 5 == 0:
@@ -295,7 +306,7 @@ N_OUTPUTS = 6
 EPOCHS = 1000
 EPSILON = 0.99
 EPSILON_DECAY = 0.99999
-THRESHOLD = 9000
+THRESHOLD = 1000
 EPSILON_MIN = 0.05
 LEARNING_RATE = 0.0001
 ALPHA_DECAY = 0
@@ -305,7 +316,7 @@ train_env = RecordVideo(
     env,
     video_folder=f"{RUN_DIR}/videos/training",
     name_prefix="space_invaders",
-    episode_trigger=lambda ep: ep % 5 == 0,   # episodes 0, 5, 10, 15
+    episode_trigger=lambda ep: ep % 50 == 0,   # episodes 0, 50, 100, 150
 ) # Record episodes
 
 dqn = DQN(
@@ -342,7 +353,7 @@ for ep in range(3):
     state = combine_images(preprocess_state(obs), preprocess_state(obs))
     done, total = False, 0
     while not done:
-        action = dqn.choose_action(state, epsilon=0.0)   # greedy, no exploring
+        action = dqn.choose_action(state, epsilon=0.05)   # standard eval epsilon, avoids getting stuck
         obs, reward, terminated, truncated, info = eval_env.step(action)
         state = combine_images(state, preprocess_state(obs))
         total += reward
