@@ -69,7 +69,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("dqn")
 
-env = gym.make("ALE/SpaceInvaders-v5",frameskip = 1, render_mode="rgb_array") # load our space invaders as a rgb array
+env = gym.make("ALE/SpaceInvaders-v5",frameskip = 3, render_mode="rgb_array") # load our space invaders as a rgb array
 env = AtariPreprocessing(env,frame_skip=4,screen_size=84,grayscale_obs=True,scale_obs=True)
 observation, info = env.reset() #reset the environment
 pygame.init() # initialise pygame for rendering
@@ -91,9 +91,6 @@ def plot_environment(env, figsize=(4, 5.25)):
     plt.axis("off")
     return img
 
-plot_environment(env) # plot our initial image
-plt.show()
-
 envs = gym.envs.registry # envs is a dictionary of all atari games
 envs["ALE/SpaceInvaders-v5"] # obtain information on space invaders
 
@@ -112,14 +109,6 @@ def preprocess_state(img):
     img = tf.image.rgb_to_grayscale(img)
     img = tf.cast(img, tf.float32) / 255
     return img
-
-img = env.render()
-gray_img = preprocess_state(img)
-plt.imshow(tf.squeeze(gray_img), cmap="gray")  # drop the channel dim, use a grey colour map
-plt.axis('off')
-plt.show()
-
-img.shape
 
 """### Network Structure
 
@@ -273,7 +262,7 @@ class DQN:
                 step += 1
                 ep_steps += 1
                 if step > 50000 and step % 4 == 0:
-                    loss = self.replay(32, self.memory)
+                    loss = self.replay(128, self.memory) # Increasing from 32
                     if loss is not None:
                         losses.append(loss)
                 if step % 10000 == 0:
@@ -313,7 +302,7 @@ EPSILON = 0.99
 EPSILON_DECAY = 0.99999
 THRESHOLD = 1000
 EPSILON_MIN = 0.025
-LEARNING_RATE = 0.0001
+LEARNING_RATE = 0.001
 ALPHA_DECAY = 0
 GAMMA = 0.99
 
@@ -349,7 +338,7 @@ avg_scores = dqn.train()
 
 train_env.close()   # flushes the last video to disk
 
-eval_env = gym.make("ALE/SpaceInvaders-v5", render_mode="rgb_array",frameskip=1)
+eval_env = gym.make("ALE/SpaceInvaders-v5", render_mode="rgb_array",frameskip=3)
 eval_env = AtariPreprocessing(eval_env,frame_skip=4,screen_size=84,grayscale_obs=True,scale_obs=True)
 eval_env = RecordVideo(eval_env, video_folder=f"{RUN_DIR}/videos/eval",
                        name_prefix="trained", episode_trigger=lambda ep: True)
@@ -378,6 +367,8 @@ plt.savefig(f"{RUN_DIR}/avg_scores.png", dpi=150)
 # Evaluation of Results
 
 # Research
+
+# When we add a penalty for death, the shooter plays like a wuss
 
 # Statement of Work
 
