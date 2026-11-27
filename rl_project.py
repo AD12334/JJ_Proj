@@ -262,6 +262,8 @@ class DQN:
                 # storing terminated instead of done is slightly more correct
                 # we changes reward to np.sign(reward) so it only remembers  the sign instead of the value
                 life_lost = info["lives"] < lives
+                if life_lost:
+                    print("Penalised for death")
                 lives = info["lives"]
                 shaped_reward = np.sign(reward) -1.0 if life_lost else np.sign(reward)
                 self.remember(state, action, shaped_reward, next_state, done)

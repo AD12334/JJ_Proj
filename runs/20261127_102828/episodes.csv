@@ -1,0 +1,2 @@
+episode,total_steps,episode_steps,reward,mean_100,epsilon,mean_loss
+0,297,297,30.0,30.0,0.9754067581704005,

@@ -1,0 +1,9 @@
+{
+  "epochs": 1000,
+  "epsilon": 0.99,
+  "epsilon_decay": 0.99999,
+  "epsilon_min": 0.05,
+  "lr": 0.0001,
+  "gamma": 0.99,
+  "buffer": 100000
+}
