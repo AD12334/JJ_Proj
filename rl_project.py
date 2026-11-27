@@ -40,7 +40,7 @@ import tensorflow as tf
 from tensorflow.keras import layers, models, optimizers
 import numpy as np
 from collections import deque
-from gymnasium.wrappers import RecordVideo
+from gymnasium.wrappers import RecordVideo,AtariPreprocessing
 import os, csv, json, pickle, logging
 from datetime import datetime
 
@@ -70,6 +70,7 @@ logging.basicConfig(
 log = logging.getLogger("dqn")
 
 env = gym.make("ALE/SpaceInvaders-v5", render_mode="rgb_array") # load our space invaders as a rgb array
+env = AtariPreprocessing(env,frame_skip=4,screen_size=84,grayscale_obs=True)
 observation, info = env.reset() #reset the environment
 pygame.init() # initialise pygame for rendering
 
@@ -247,7 +248,6 @@ class DQN:
                         "mean_100", "epsilon", "mean_loss"])
         for e in range(self.epochs):
             obs, info = self.env.reset()
-            state = preprocess_state(obs)
             state = combine_images(state, state)
             done = False
             i = 0
@@ -256,7 +256,6 @@ class DQN:
                 action = self.choose_action(state)
                 next_state, reward, terminated, truncated, info = self.env.step(action)
                 done = (terminated or truncated)
-                next_state = preprocess_state(next_state)
                 next_state = combine_images(state, next_state)
                 #print(next_state.shape)
                 # storing terminated instead of done is slightly more correct
@@ -350,12 +349,12 @@ eval_env = RecordVideo(eval_env, video_folder=f"{RUN_DIR}/videos/eval",
 
 for ep in range(3):
     obs, info = eval_env.reset()
-    state = combine_images(preprocess_state(obs), preprocess_state(obs))
+    state = combine_images(obs,obs)
     done, total = False, 0
     while not done:
         action = dqn.choose_action(state, epsilon=0.05)   # standard eval epsilon, avoids getting stuck
         obs, reward, terminated, truncated, info = eval_env.step(action)
-        state = combine_images(state, preprocess_state(obs))
+        state = combine_images(state,obs)
         total += reward
         done = terminated or truncated
     print(f"Eval episode {ep}: score {total}")
