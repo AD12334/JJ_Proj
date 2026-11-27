@@ -249,6 +249,7 @@ class DQN:
         for e in range(self.epochs):
             obs, info = self.env.reset()
             state = combine_images(obs, obs)
+            lives=info["lives"]
             done = False
             i = 0
             losses, ep_steps = [], 0
@@ -260,7 +261,10 @@ class DQN:
                 #print(next_state.shape)
                 # storing terminated instead of done is slightly more correct
                 # we changes reward to np.sign(reward) so it only remembers  the sign instead of the value
-                self.remember(state, action, np.sign(reward), next_state, done)
+                life_lost = info["lives"] < lives
+                lives = info["lives"]
+                shaped_reward = np.sign(reward) -1.0 if life_lost else np.sign(reward)
+                self.remember(state, action, shaped_reward, next_state, done)
                 state = next_state
                 self.epsilon = max(self.epsilon_min, self.epsilon_decay * self.epsilon)
                 i += reward
@@ -306,7 +310,7 @@ EPOCHS = 1000
 EPSILON = 0.99
 EPSILON_DECAY = 0.99999
 THRESHOLD = 1000
-EPSILON_MIN = 0.05
+EPSILON_MIN = 0.025
 LEARNING_RATE = 0.0001
 ALPHA_DECAY = 0
 GAMMA = 0.99
@@ -343,7 +347,7 @@ avg_scores = dqn.train()
 
 train_env.close()   # flushes the last video to disk
 
-eval_env = gym.make("ALE/SpaceInvaders-v5", render_mode="rgb_array")
+eval_env = gym.make("ALE/SpaceInvaders-v5", render_mode="rgb_array",frameskip=1)
 eval_env = AtariPreprocessing(eval_env,frame_skip=4,screen_size=84,grayscale_obs=True,scale_obs=True)
 eval_env = RecordVideo(eval_env, video_folder=f"{RUN_DIR}/videos/eval",
                        name_prefix="trained", episode_trigger=lambda ep: True)
