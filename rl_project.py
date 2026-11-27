@@ -69,8 +69,8 @@ logging.basicConfig(
 )
 log = logging.getLogger("dqn")
 
-env = gym.make("ALE/SpaceInvaders-v5", render_mode="rgb_array") # load our space invaders as a rgb array
-env = AtariPreprocessing(env,frame_skip=4,screen_size=84,grayscale_obs=True)
+env = gym.make("ALE/SpaceInvaders-v5",frameskip = 1, render_mode="rgb_array") # load our space invaders as a rgb array
+env = AtariPreprocessing(env,frame_skip=4,screen_size=84,grayscale_obs=True,scale_obs=True)
 observation, info = env.reset() #reset the environment
 pygame.init() # initialise pygame for rendering
 
@@ -248,7 +248,7 @@ class DQN:
                         "mean_100", "epsilon", "mean_loss"])
         for e in range(self.epochs):
             obs, info = self.env.reset()
-            state = combine_images(state, state)
+            state = combine_images(obs, obs)
             done = False
             i = 0
             losses, ep_steps = [], 0
@@ -344,6 +344,7 @@ avg_scores = dqn.train()
 train_env.close()   # flushes the last video to disk
 
 eval_env = gym.make("ALE/SpaceInvaders-v5", render_mode="rgb_array")
+eval_env = AtariPreprocessing(eval_env,frame_skip=4,screen_size=84,grayscale_obs=True,scale_obs=True)
 eval_env = RecordVideo(eval_env, video_folder=f"{RUN_DIR}/videos/eval",
                        name_prefix="trained", episode_trigger=lambda ep: True)
 
